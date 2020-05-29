@@ -14,6 +14,19 @@ Eigen::Vector3d getInterpolatedVector(const Eigen::MatrixXd& V, const Eigen::Vec
   return pc;
 }
 
+int getClosestIndex(const Eigen::Vector3i& ind, const Eigen::Vector3f& weight)
+{
+  float maxWeight = -1.f;
+  int minIdx = -1;
+  for(int i=0; i<weight.rows(); ++i) {
+    if(weight[i] > maxWeight) {
+      minIdx = ind[i];
+      maxWeight = weight[i];
+    }
+  }
+  return minIdx;
+}
+
 // We try to align the source mesh to a certain vector in the world.
 Eigen::Matrix4d getAlignment(const Eigen::MatrixXd& source, const float targetWidth, const float targetHeight,
                              const Eigen::Vector3d& center, const Eigen::Vector3d& normal)
@@ -37,6 +50,31 @@ Eigen::Matrix4d getAlignment(const Eigen::MatrixXd& source, const float targetWi
   return ret.matrix();
 }
 
+void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector4i& index, 
+                      float& targetWidth, float& targetHeight,
+                      Eigen::Vector3d& center, Eigen::Vector3d& normal)
+{
+//    i4 --------- i3
+//    |            |
+//    i1 --------- i2 
+
+  int i1, i2, i3, i4; // from bottom left, go counter clock wise direction.
+  i1 = index[0]; 
+  i2 = index[1];
+  i3 = index[2];
+  i4 = index[3];
+
+  float fringeFactor = 0.8f;
+
+  targetWidth = fmin(source.row(i1)[0] - source.row(i2)[0], source.row(i4)[0] - source.row(i3)[0]) * fringeFactor;
+  targetHeight = fmin(source.row(i4)[2] - source.row(i1)[2], source.row(i3)[2] - source.row(i2)[2]) * fringeFactor;
+
+  center = (source.row(i1) + source.row(i2) + source.row(i3) + source.row(i4)) / 4;
+
+  normal = Eigen::Vector3d(source.row(i1) - source.row(i4)).cross(Eigen::Vector3d(source.row(i3) - source.row(i4)));
+  normal.normalize();
+}
+
 int main(int argc, char *argv[])
 {
   // Inline mesh of a cube
@@ -44,8 +82,8 @@ int main(int argc, char *argv[])
   Eigen::MatrixXd Vword, Nword;
   Eigen::MatrixXi F, Fword;
 
-  igl::readSTL("/home/todd/Documents/Workspace/maskProject/Data/JCHANG-S1-TA-M.stl", V, F, N);
-  igl::readSTL("/home/todd/Documents/Workspace/maskProject/Data/output.stl", Vword, Fword, Nword);
+  igl::readSTL("/home/todd/Documents/Workspace/maskProject/Data/Batch1/Alexandra_Ke_D2_59_SFM-C-0.stl", V, F, N);
+  igl::readSTL("/home/todd/Documents/Workspace/maskProject/Data/textModel/AlexandraK(D25).stl", Vword, Fword, Nword);
 
   Eigen::MatrixXd C(F.rows() + Fword.rows(), 3);
   C << Eigen::RowVector3d(0.2, 0.3, 0.8).replicate(F.rows(), 1),
@@ -64,13 +102,13 @@ int main(int argc, char *argv[])
     if(igl::unproject_onto_mesh(Eigen::Vector2f(x,y), viewer.core().view,
       viewer.core().proj, viewer.core().viewport, V, F, fid, bc))
     {
-      // paint hit red
+      // paint hit green
       C.row(fid) << 0, 1, 0;
       viewer.data().set_colors(C);
       Eigen::Vector3i triIndex = F.row(fid);
       Eigen::Vector3d pv = getInterpolatedVector(V, triIndex, bc);
-      Eigen::Vector3d pn = getInterpolatedVector(N, triIndex, bc);
-      std::cout<<"Vertex position: " << pv <<"  "<< " normal: " << pn << std::endl;
+      int idx = getClosestIndex(triIndex, bc);
+      std::cout<<"Vertex position: " << pv <<"  "<< " closest index: " << idx << std::endl;
       return true;
     }
     return false;
@@ -83,16 +121,20 @@ int main(int argc, char *argv[])
   Vword = Vword.rowwise() - v2.transpose();
 
   // Obtain the mask region information.
-  float regionWid = 29.9151f + 27.1758f;
+  /*float regionWid = 29.9151f + 27.1758f;
   float regionHei = 43.4263f - 40.2759f;
   Eigen::Vector3d center = Eigen::Vector3d((29.9151 + 29.9307 -27.1758 - 27.1302) / 4,
                                            (18.4323 + 17.3042 + 18.4046 + 17.2646) / 4,
                                            (-40.2341 - 43.3516 - 40.2759 - 43.4263) / 4);
   Eigen::Vector3d normal = Eigen::Vector3d(29.9151 - 29.9307, 18.4323 - 17.3042, -40.2341 + 43.3516).
                            cross(Eigen::Vector3d(29.9151 + 27.1758, 18.4323 - 18.4046, -40.2341 + 40.2759));
-  normal.normalize();
+  normal.normalize();*/
 
-  Eigen::Matrix4d aliMat = getAlignment(V, regionWid, regionHei, center, normal);
+  float regionW, regionH;
+  Eigen::Vector3d center, normal;
+  obtainRegionInfo(V, {462066, 463776, 463777, 462068}, regionW, regionH, center, normal);
+
+  Eigen::Matrix4d aliMat = getAlignment(V, regionW, regionH, center, normal);
 
   Vword = Vword * aliMat.block<3, 3>(0, 0);
   Vword = Vword.rowwise() + aliMat.block<3, 1>(0, 3).transpose();
