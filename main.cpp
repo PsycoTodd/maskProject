@@ -65,16 +65,20 @@ Eigen::Matrix3d MatrixRot(Eigen::Vector3d x1, Eigen::Vector3d y1, Eigen::Vector3
   return ret;                            
 }
 
-float getScaleFactor(const Eigen::MatrixXd& source, const float targetWidth, const float targetHeight)
+Eigen::Matrix3d getScaleFactor(const Eigen::MatrixXd& source, const float targetWidth, const float targetHeight)
 {
   Eigen::Vector3d min = source.colwise().minCoeff();
   Eigen::Vector3d max = source.colwise().maxCoeff();
   float sourceWidth = max.x() - min.x();
   float sourceHeight = max.y() - min.y();
+  float sourceDepth = max.z() - min.z();
   float sourceRatio = sourceHeight / sourceWidth;
   float targetRatio = targetHeight / targetWidth;
   float scaleFactor = sourceRatio < targetRatio ? targetWidth / sourceWidth : targetHeight / sourceHeight;
-  return scaleFactor;
+  Eigen::Matrix3d ret = Eigen::Matrix3d::Identity();
+  ret *= scaleFactor;
+  ret.row(2)[2] = 1.6 / sourceDepth;
+  return ret;
 }
 
 Eigen::Matrix4d getCoordSysAlignment(const Eigen::MatrixXd& source, const float targetWidth, const float targetHeight,
@@ -165,11 +169,11 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& inde
   i2 = index[1];
   i3 = index[2];
   
-  float fringeFactor = 0.5f;
+  float fringeFactor = 0.7f;
   targetWidth = fabs(source.row(i3)[2] - source.row(i2)[2]) * fringeFactor;
   targetHeight = fabs(source.row(i3)[1] - source.row(i1)[2]) * fringeFactor;
 
-  center = (source.row(i1) + source.row(i2) + source.row(i3)) / 3;
+  center = source.row(i1) * 1.3/3 + source.row(i2) * 0.85 / 3 + source.row(i3) * 0.85 / 3;
 
   Eigen::Vector3d res = Eigen::Vector3d(source.row(i2) - source.row(i3));
   xpt = res.normalized();
@@ -180,25 +184,13 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& inde
 int main(int argc, char *argv[])
 {
   // Inline mesh of a cube
-  Eigen::MatrixXd rawV, V, N;
-  Eigen::MatrixXd rawVword, Vword, Nword;
-  Eigen::MatrixXi rawF, F, rawFword, Fword;
+  Eigen::MatrixXd V, N;
+  Eigen::MatrixXd Vword, Nword;
+  Eigen::MatrixXi F, Fword;
 
-  igl::readSTL(argv[1], rawV, rawF, N);
-  igl::readSTL(argv[2], rawVword, rawFword, Nword);
+  igl::readSTL(argv[1], V, F, N);
+  igl::readSTL(argv[2], Vword, Fword, Nword);
 
-  Eigen::MatrixXi _1, _2;
-  igl::remove_duplicate_vertices(
-     Eigen::MatrixXd(rawV),
-     Eigen::MatrixXi(rawF),
-     1e-5,
-     V,
-     _1,_2,
-     F);
-
-  F = _2(F);
-  Eigen::VectorXi _;
-  igl::bfs_orient(Eigen::MatrixXi(F),F,_);
 
   Eigen::MatrixXd C(F.rows() + Fword.rows(), 3);
   C << Eigen::RowVector3d(0.2, 0.2, 0.2).replicate(F.rows(), 1),
@@ -252,7 +244,7 @@ int main(int argc, char *argv[])
   Eigen::Matrix4d aliMat = getAlignment(Vword, regionW, regionH, center, normal);*/
 
   Eigen::Vector3d po, px, pz;
-  obtainRegionInfo(V, {6586, 6587, 6579}, regionW, regionH, po, px, pz);
+  obtainRegionInfo(V, {465442, 465443, 465441}, regionW, regionH, po, px, pz);
 
   /*Eigen::Matrix4d aliMat = getCoordSysAlignment(Vword, regionW, regionH, 
                                                 {0, 0, 0}, {1, 0, 0}, {0, 0, -1},
@@ -276,9 +268,13 @@ int main(int argc, char *argv[])
   mat = MatrixRot(Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitZ(), px, pz.cross(px), pz);
  /* quad = Eigen::Quaterniond(Eigen::AngleAxisd(3.1415926 / 2.0, Eigen::Vector3d::UnitX())) * 
          Eigen::Quaterniond(Eigen::AngleAxisd(-3.1415926 / 2.0, Eigen::Vector3d::UnitY())) * quad;*/
-  Vword = Vword * getScaleFactor(Vword, regionW, regionH) * mat.transpose();
-  Eigen::Vector3d shift = (Eigen::RowVector3d::UnitZ() * mat.transpose() * (-0.5)).transpose();
+  Vword = Vword * getScaleFactor(Vword, regionW, regionH);
+  std::cout << "text property " << Vword.colwise().minCoeff() << " " << Vword.colwise().maxCoeff() << std::endl;
+  Vword = Vword * mat.transpose();
+  Eigen::Vector3d shift = (Eigen::RowVector3d::UnitZ() * mat.transpose() * (0.4)).transpose();
   Vword = Vword.rowwise() + (po + shift).transpose();
+
+
 
   
 
