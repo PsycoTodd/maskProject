@@ -169,7 +169,7 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& inde
   i2 = index[1];
   i3 = index[2];
   
-  float fringeFactor = 0.7f;
+  float fringeFactor = 0.6f;
   targetWidth = fabs(source.row(i3)[2] - source.row(i2)[2]) * fringeFactor;
   targetHeight = fabs(source.row(i3)[1] - source.row(i1)[2]) * fringeFactor;
 
@@ -179,6 +179,13 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& inde
   xpt = res.normalized();
   Eigen::Vector3d normal = Eigen::Vector3d(source.row(i1) - source.row(i3)).cross(Eigen::Vector3d(source.row(i2) - source.row(i3)));
   zpt = normal.normalized();
+}
+
+Eigen::Vector3d getBboxCenter(const Eigen::MatrixXd& source)
+{
+  Eigen::Vector3d max = source.colwise().maxCoeff();
+  Eigen::Vector3d min = source.colwise().minCoeff();
+  return (max + min) * 0.5;
 }
 
 int main(int argc, char *argv[])
@@ -221,8 +228,8 @@ int main(int argc, char *argv[])
     return false;
   };
 
-  Eigen::Vector3d v1 = V.colwise().mean();
-  Eigen::Vector3d v2 = Vword.colwise().mean();
+  Eigen::Vector3d v1 = getBboxCenter(V);
+  Eigen::Vector3d v2 = getBboxCenter(Vword);
 
   V = V.rowwise() - v1.transpose();
   Vword = Vword.rowwise() - v2.transpose();
