@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/example_bin",
-            "args": ["/home/todd/Documents/Workspace/maskProject/Data/Batch1/Alexandra_Ke_D2_59_SFM-C-0.stl", "/home/todd/Documents/Workspace/maskProject/Data/TestText.stl"],
+            "args": ["/home/todd/Documents/Workspace/maskProject/Data/Batch0529Masks/JuniorBossM(CD0)-M-CD06DD67-EEAF-4C2C-9F85-C98B4F2B5F92.stl", "/home/todd/Documents/Workspace/maskProject/Data/textModel2/JuniorBossM(CD0).stl"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],

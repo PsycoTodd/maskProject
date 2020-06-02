@@ -36,9 +36,9 @@ Eigen::Matrix3d getScaleFactor(const Eigen::MatrixXd& source, const float target
   float sourceWidth = max.x() - min.x();
   float sourceHeight = max.y() - min.y();
   float sourceDepth = max.z() - min.z();
-  float sourceRatio = sourceHeight / sourceWidth;
-  float targetRatio = targetHeight / targetWidth;
-  float scaleFactor = sourceRatio < targetRatio ? targetWidth / sourceWidth : targetHeight / sourceHeight;
+  float widthRatio = targetWidth / sourceWidth;
+  float heightRatio = targetHeight / sourceHeight;
+  float scaleFactor = heightRatio * sourceWidth > targetWidth ? widthRatio :heightRatio;
   Eigen::Matrix3d ret = Eigen::Matrix3d::Identity();
   ret *= scaleFactor;
   ret.row(2)[2] = targetDepth / sourceDepth;
@@ -47,7 +47,7 @@ Eigen::Matrix3d getScaleFactor(const Eigen::MatrixXd& source, const float target
 
 void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& index, 
                       float& targetWidth, float& targetHeight,
-                      Eigen::Vector3d& center, Eigen::Vector3d& xpt, Eigen::Vector3d& ypt)
+                      Eigen::Vector3d& center, Eigen::Vector3d& xpt, Eigen::Vector3d& zpt)
 {
 //    i3 --------- i2
 //     \           /
@@ -57,16 +57,18 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& inde
   i2 = index[1];
   i3 = index[2];
   
-  float fringeFactor = 0.54f;
-  targetWidth = fabs(source.row(i3)[2] - source.row(i2)[2]) * fringeFactor;
-  targetHeight = fabs(source.row(i3)[1] - source.row(i1)[2]) * fringeFactor;
+  float fringeFactorWidth = 0.8;
+  float fringeFactorHeight = 0.8;
+  targetWidth = (source.row(i3) - source.row(i2)).norm() * fringeFactorWidth;
+  targetHeight = (source.row(i3) - source.row(i1) + (source.row(i2) - source.row(i3)).normalized() * 
+                 (source.row(i3) - source.row(i1)).dot((source.row(i3) - source.row(i2)).normalized())).norm() * fringeFactorHeight;
 
-  center = source.row(i1) * 1.3/3 + source.row(i2) * 0.85 / 3 + source.row(i3) * 0.85 / 3; // make the word closer to the lower part.
+  center = source.row(i1) * 1.5/3 + source.row(i2) * 0.75 / 3 + source.row(i3) * 0.75 / 3;
 
   Eigen::Vector3d res = Eigen::Vector3d(source.row(i2) - source.row(i3));
   xpt = res.normalized();
   Eigen::Vector3d normal = Eigen::Vector3d(source.row(i1) - source.row(i3)).cross(Eigen::Vector3d(source.row(i2) - source.row(i3)));
-  ypt = normal.normalized();
+  zpt = normal.normalized();
 }
 
 Eigen::Vector3d getBboxCenter(const Eigen::MatrixXd& source)
@@ -113,6 +115,7 @@ int main(int argc, char *argv[])
       viewer.core().proj, viewer.core().viewport, V, F, fid, bc))
     {
       // paint hit red
+
       C.row(fid) << 0, 1, 0;
       viewer.data().set_colors(C);
       Eigen::Vector3i ids = F.row(fid);
@@ -126,34 +129,40 @@ int main(int argc, char *argv[])
   };
 
   viewer.callback_key_down = 
-  [&V, &F, &Vword, &Fword, &Vminus, &Fminus, &Vsum, &Fsum, &triIndex, &viewer, &outputFilePath]
+  [&V, &F, &C, &Vword, &Fword, &Vminus, &Fminus, &Vsum, &Fsum, &triIndex, &viewer, &outputFilePath]
   (igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier)->bool
   {
     if (key == 'D')
     {
       float regionW, regionH;
       Eigen::Vector3d po, px, pz;
+      Eigen::MatrixXd alignedVword;
+      Eigen::MatrixXi alignedFword;
       obtainRegionInfo(V, triIndex, regionW, regionH, po, px, pz);
 
       Eigen::Matrix3d rotation;
       rotation.col(0) = px.transpose();
       rotation.col(1) = pz.cross(px).transpose();
       rotation.col(2) = pz.transpose();                              
-      float wordDepth = 1.6;          
-      Vword = Vword * getScaleFactor(Vword, regionW, regionH, wordDepth) * rotation.transpose();
+      float wordDepth = 1.6;
+
+      alignedVword = Vword * getScaleFactor(Vword, regionW, regionH, wordDepth) * rotation.transpose();
       Eigen::Vector3d shift = (Eigen::RowVector3d::UnitZ() * rotation.transpose() * wordDepth / 4).transpose(); // only leave 0.4 inside of the mask. 
-      Vword = Vword.rowwise() + (po + shift).transpose();
+      alignedVword = alignedVword.rowwise() + (po + shift).transpose();
 
-      Vsum << V, Vword;
-      Fword = Fword.array() + V.rows(); 
-      Fsum << F, Fword;
+      Vsum << V, alignedVword;
+      alignedFword = Fword.array() + V.rows(); 
+      Fsum << F, alignedFword;
 
-      Eigen::MatrixXd C2(F.rows() + Fword.rows(), 3);
+      std::cout<<"############ Vsum row: " << Vsum.rows()<<std::endl;
+
+      Eigen::MatrixXd C2(F.rows() + alignedFword.rows(), 3);
       C2 << Eigen::RowVector3d(0.2, 0.3, 0.8).replicate(F.rows(), 1),
-           Eigen::RowVector3d(1.0, 0.7, 0.2).replicate(Fword.rows(), 1);
+            Eigen::RowVector3d(1.0, 0.7, 0.2).replicate(alignedFword.rows(), 1);
+      C = C2; // so next time the color set is right.
 
 /*
-      igl::copyleft::cgal::mesh_boolean(V, F, Vword, Fword, igl::MESH_BOOLEAN_TYPE_UNION,Vminus,Fminus);
+      igl::copyleft::cgal::mesh_boolean(V, F, alignedVword, alignedFword, igl::MESH_BOOLEAN_TYPE_UNION,Vminus,Fminus);
       Eigen::MatrixXd C2(Fminus.rows(), 3);
       C2 << Eigen::RowVector3d(0, 0.8, 0).replicate(Fminus.rows(), 1);
 */

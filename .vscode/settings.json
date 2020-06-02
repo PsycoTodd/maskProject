@@ -72,6 +72,16 @@
         "fft": "cpp",
         "matrixfunctions": "cpp",
         "nonlinearoptimization": "cpp",
-        "openglsupport": "cpp"
+        "openglsupport": "cpp",
+        "core": "cpp",
+        "sparsecore": "cpp",
+        "superlusupport": "cpp",
+        "adolcforward": "cpp",
+        "autodiff": "cpp",
+        "bvh": "cpp",
+        "kroneckerproduct": "cpp",
+        "mprealsupport": "cpp",
+        "numericaldiff": "cpp",
+        "splines": "cpp"
     }
 }

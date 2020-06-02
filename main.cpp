@@ -72,9 +72,9 @@ Eigen::Matrix3d getScaleFactor(const Eigen::MatrixXd& source, const float target
   float sourceWidth = max.x() - min.x();
   float sourceHeight = max.y() - min.y();
   float sourceDepth = max.z() - min.z();
-  float sourceRatio = sourceHeight / sourceWidth;
-  float targetRatio = targetHeight / targetWidth;
-  float scaleFactor = sourceRatio < targetRatio ? targetWidth / sourceWidth : targetHeight / sourceHeight;
+  float widthRatio = targetWidth / sourceWidth;
+  float heightRatio = targetHeight / sourceHeight;
+  float scaleFactor = heightRatio * sourceWidth > targetWidth ? widthRatio :heightRatio;
   Eigen::Matrix3d ret = Eigen::Matrix3d::Identity();
   ret *= scaleFactor;
   ret.row(2)[2] = 1.6 / sourceDepth;
@@ -146,10 +146,11 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector4i& inde
   i3 = index[2];
   i4 = index[3];
 
-  float fringeFactor = 0.5f;
+  float fringeFactorWidth = 0.8f;
+  float fringeFactorHeight = 0.5f;
 
-  targetWidth = fmin(source.row(i1)[2] - source.row(i2)[2], source.row(i4)[2] - source.row(i3)[2]) * fringeFactor;
-  targetHeight = fmin(source.row(i4)[1] - source.row(i1)[1], source.row(i3)[1] - source.row(i2)[1]) * fringeFactor;
+  targetWidth = fmin(source.row(i1)[2] - source.row(i2)[2], source.row(i4)[2] - source.row(i3)[2]) * fringeFactorWidth;
+  targetHeight = fmin(source.row(i4)[1] - source.row(i1)[1], source.row(i3)[1] - source.row(i2)[1]) * fringeFactorHeight;
 
   center = (source.row(i1) + source.row(i2) + source.row(i3) + source.row(i4)) / 4;
 
@@ -169,11 +170,13 @@ void obtainRegionInfo(const Eigen::MatrixXd& source, const Eigen::Vector3i& inde
   i2 = index[1];
   i3 = index[2];
   
-  float fringeFactor = 0.6f;
-  targetWidth = fabs(source.row(i3)[2] - source.row(i2)[2]) * fringeFactor;
-  targetHeight = fabs(source.row(i3)[1] - source.row(i1)[2]) * fringeFactor;
+  float fringeFactorWidth = 0.8;
+  float fringeFactorHeight = 0.8;
+  targetWidth = (source.row(i3) - source.row(i2)).norm() * fringeFactorWidth;
+  targetHeight = (source.row(i3) - source.row(i1) + (source.row(i2) - source.row(i3)).normalized() * 
+                 (source.row(i3) - source.row(i1)).dot((source.row(i3) - source.row(i2)).normalized())).norm() * fringeFactorHeight;
 
-  center = source.row(i1) * 1.3/3 + source.row(i2) * 0.85 / 3 + source.row(i3) * 0.85 / 3;
+  center = source.row(i1) * 1.5/3 + source.row(i2) * 0.75 / 3 + source.row(i3) * 0.75 / 3;
 
   Eigen::Vector3d res = Eigen::Vector3d(source.row(i2) - source.row(i3));
   xpt = res.normalized();
@@ -251,7 +254,7 @@ int main(int argc, char *argv[])
   Eigen::Matrix4d aliMat = getAlignment(Vword, regionW, regionH, center, normal);*/
 
   Eigen::Vector3d po, px, pz;
-  obtainRegionInfo(V, {465442, 465443, 465441}, regionW, regionH, po, px, pz);
+  obtainRegionInfo(V, {466312, 466313, 466311}, regionW, regionH, po, px, pz);
 
   /*Eigen::Matrix4d aliMat = getCoordSysAlignment(Vword, regionW, regionH, 
                                                 {0, 0, 0}, {1, 0, 0}, {0, 0, -1},
